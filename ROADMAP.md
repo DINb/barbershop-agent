@@ -70,9 +70,27 @@ flowchart LR
     Fase1 -.evolui para.-> Fase2
 ```
 
-- Migrar de número de teste para número de produção verificado (Meta Cloud
-  API) **ou** manter um provedor tipo Z-API/Evolution API, dependendo do
-  orçamento e volume de mensagens do cliente
+### Estratégia de canal WhatsApp — decisão registrada
+
+Depois de testar ambos os caminhos na prática, a estratégia adotada é em
+**duas etapas**, não uma escolha única:
+
+| Etapa | Provedor | Por quê |
+|---|---|---|
+| **Trial e primeiras semanas** | Z-API | Setup rápido (QR code), sem exigir CNPJ do cliente, ideal para validar o interesse antes de formalizar |
+| **Após fechamento de contrato** | Meta Cloud API (produção) | Uma vez que o cliente registra um número de produção **brasileiro** (exige CNPJ/MEI), a comunicação passa a ser BR→BR e deixa de sofrer a restrição de mensagens entre países que a Meta aplica a números de teste americanos. Isso torna o canal gratuito até 1.000 conversas de serviço/mês, elimina o risco de banimento (canal oficial vs. não-oficial), e reforça o discurso comercial de conformidade/seriedade junto ao LGPD já implementado |
+
+**Nota técnica importante**: a causa raiz de instabilidade observada durante
+os testes com número de teste da Meta (erro 130497 — "Business account is
+restricted from messaging users in this country") foi a política de
+restrição de mensagens cross-border envolvendo o Brasil, aplicada a números
+de teste americanos. Um número de produção brasileiro não é afetado por
+essa restrição.
+
+Migrar de Z-API para Meta oficial, quando chegar a hora, não exige reescrever
+o agente — apenas trocar o arquivo de webhook em uso (`zapi_webhook.py` →
+`whatsapp_webhook.py`), já que ambos reutilizam o mesmo `agent_orchestrator.py`.
+
 - Trocar os arquivos JSON por um banco de dados real (PostgreSQL ou SQLite
   para começar), preservando o mesmo contrato de dados já usado no mock
 - Formalizar retenção de dados e backups, alinhado ao módulo de LGPD já
