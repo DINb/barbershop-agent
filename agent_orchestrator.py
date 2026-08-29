@@ -23,6 +23,7 @@ from groq import Groq
 
 import mock_api
 import lgpd_compliance as lgpd
+import human_handoff
 from rag_knowledge import build_knowledge_base
 
 MODEL = "openai/gpt-oss-120b"
@@ -43,6 +44,20 @@ e você tiver chamado registrar_consentimento com aceito=true. Nunca colete ou
 grave nome/telefone sem esse passo. Se o cliente pedir para apagar os dados
 dele, use a tool apagar_meus_dados. Se pedir para ver os dados dele, use
 consultar_meus_dados.
+
+REGRA DE TRANSFERÊNCIA PARA HUMANO:
+Chame a tool transferir_para_humano nestas situações, sem tentar resolver
+sozinho:
+- O cliente pede explicitamente para falar com uma pessoa/atendente.
+- O cliente demonstra insatisfação, reclamação ou frustração (ex: sobre um
+  atendimento anterior, cobrança, qualidade do serviço).
+- O pedido é uma exceção às regras normais (ex: desconto especial,
+  remarcação fora da política, horário fora do funcionamento).
+- A pergunta está fora do seu escopo (não é sobre agendamento, serviços,
+  horários ou dados pessoais).
+- Você tentou ajudar 2 vezes seguidas na mesma dúvida e não conseguiu.
+Depois de chamar essa tool, informe ao cliente de forma acolhedora que
+alguém da equipe vai continuar o atendimento em breve.
 
 Seja objetivo, cordial, e sempre confirme os detalhes (serviço, data, hora)
 antes de efetivar uma ação. Datas devem estar no formato YYYY-MM-DD."""
@@ -187,6 +202,28 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "transferir_para_humano",
+            "description": "Transfere a conversa para um atendente humano, notificando o dono do negócio. Use quando o cliente pedir, demonstrar insatisfação, pedir uma exceção às regras, ou fizer uma pergunta fora do escopo do agente.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "cliente_telefone": {"type": "string"},
+                    "motivo": {
+                        "type": "string",
+                        "description": "Categoria curta, ex: 'pedido explícito', 'reclamação', 'excecao_de_regra', 'fora_de_escopo'",
+                    },
+                    "resumo": {
+                        "type": "string",
+                        "description": "Resumo em 1-2 frases do que o cliente precisa, para o dono entender rápido o contexto.",
+                    },
+                },
+                "required": ["cliente_telefone", "motivo", "resumo"],
+            },
+        },
+    },
 ]
 
 
@@ -249,6 +286,13 @@ def _execute_tool(name: str, args: dict) -> dict:
 
     if name == "apagar_meus_dados":
         return lgpd.DataSubjectRights.forget_me(args["cliente_telefone"])
+
+    if name == "transferir_para_humano":
+        return human_handoff.notify_owner(
+            cliente_telefone=args["cliente_telefone"],
+            motivo=args["motivo"],
+            resumo=args["resumo"],
+        )
 
     return {"erro": f"Tool desconhecida: {name}"}
 

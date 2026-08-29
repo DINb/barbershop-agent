@@ -15,6 +15,7 @@ import sys
 
 from agent_orchestrator import BarbershopAgent
 import lgpd_compliance as lgpd
+import human_handoff
 
 BANNER = """
 ============================================================
@@ -25,6 +26,7 @@ BANNER = """
 Digite sua mensagem como se fosse um cliente no WhatsApp.
 Comandos especiais:
   /auditoria   -> mostra o log de auditoria LGPD desta sessao
+  /handoffs    -> mostra as transferencias para atendimento humano
   /sair        -> encerra a demo
 ------------------------------------------------------------
 """
@@ -56,6 +58,12 @@ def main():
             for entry in lgpd.get_audit_log():
                 print(f"[{entry['timestamp']}] {entry['action']}: {entry['detail']}")
             print("-----------------------------\n")
+            continue
+        if user_input.lower() == "/handoffs":
+            print("\n--- Transferencias para atendimento humano ---")
+            for entry in human_handoff.get_handoff_log():
+                print(f"[{entry['timestamp']}] {entry['cliente_telefone']} -> {entry['motivo']}: {entry['resumo']}")
+            print("-----------------------------------------------\n")
             continue
 
         resposta = agent.chat(user_input)

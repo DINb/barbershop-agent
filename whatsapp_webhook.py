@@ -25,6 +25,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import PlainTextResponse
 
 from agent_orchestrator import BarbershopAgent
+import human_handoff
 
 load_dotenv()
 
@@ -33,7 +34,7 @@ app = FastAPI(title="Barbearia WhatsApp Webhook")
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 WHATSAPP_PHONE_ID = os.environ.get("WHATSAPP_PHONE_ID")
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "barbearia_verify_token")
-GRAPH_API_URL = f"https://graph.facebook.com/v26.0/{WHATSAPP_PHONE_ID}/messages"
+GRAPH_API_URL = f"https://graph.facebook.com/v21.0/{WHATSAPP_PHONE_ID}/messages"
 
 # Um agente por número de cliente, para manter o histórico de conversa de
 # cada pessoa separado (equivalente a uma sessão por usuário).
@@ -47,37 +48,25 @@ def get_agent_for(phone: str) -> BarbershopAgent:
 
 
 def send_whatsapp_message(to: str, text: str) -> dict:
-    # Remove o sinal de '+' se existir
-    to = to.replace("+", "")
-    
-    # Se o número brasileiro tiver o 9º dígito (13 caracteres), remove-o
-    if len(to) == 13 and to.startswith("55"):
-        to = to[:4] + to[5:]
-        
-    # DEFINIÇÃO DOS HEADERS (A que estava faltando!)
     headers = {
         "Authorization": f"Bearer {WHATSAPP_TOKEN}",
         "Content-Type": "application/json",
     }
-    
     payload = {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
         "to": to,
         "type": "text",
-        "text": {"preview_url": False, "body": text}
+        "text": {"body": text},
     }
-    
     resp = requests.post(GRAPH_API_URL, headers=headers, json=payload, timeout=15)
-
-    
-    try:
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"Erro ao enviar mensagem: {e}")
-        print(f"Detalhes do erro da Meta: {resp.text}") 
-
+    resp.raise_for_status()
     return resp.json()
+
+
+# Registra esta função como o "canal" usado para avisar o dono do negócio
+# quando o agente decidir transferir uma conversa para atendimento humano.
+human_handoff.register_notifier(send_whatsapp_message)
 
 
 @app.get("/webhook")

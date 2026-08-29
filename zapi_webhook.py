@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 
 from agent_orchestrator import BarbershopAgent
+import human_handoff
 
 load_dotenv()
 
@@ -50,6 +51,11 @@ def send_whatsapp_message(phone: str, message: str) -> dict:
     resp = requests.post(ZAPI_SEND_TEXT_URL, headers=headers, json=payload, timeout=15)
     resp.raise_for_status()
     return resp.json()
+
+
+# Registra esta função como o "canal" usado para avisar o dono do negócio
+# quando o agente decidir transferir uma conversa para atendimento humano.
+human_handoff.register_notifier(send_whatsapp_message)
 
 
 @app.post("/webhook")
