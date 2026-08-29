@@ -1,0 +1,27 @@
+{
+  "appointments": [
+    {
+      "id": "apt_1001",
+      "cliente_nome": "João Silva",
+      "cliente_telefone": "+55 81 99999-0001",
+      "servico_id": "svc_003",
+      "barbeiro_id": "barb_001",
+      "data": "2026-08-18",
+      "hora": "10:00",
+      "status": "confirmado",
+      "criado_em": "2026-08-14T09:12:00-03:00"
+    },
+    {
+      "id": "apt_1002",
+      "cliente_nome": "Pedro Costa",
+      "cliente_telefone": "+55 81 99999-0002",
+      "servico_id": "svc_001",
+      "barbeiro_id": "barb_002",
+      "data": "2026-08-18",
+      "hora": "11:00",
+      "status": "confirmado",
+      "criado_em": "2026-08-15T14:20:00-03:00"
+    }
+  ],
+  "next_id": 1003
+}

@@ -1,0 +1,16 @@
+# Segredos - NUNCA subir
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# VS Code
+.vscode/
+
+# Dados de teste locais (opcional - remova estas linhas se quiser versionar o estado inicial)
+# data/appointments.json
+# data/consent_log.json

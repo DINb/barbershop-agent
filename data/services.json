@@ -1,0 +1,52 @@
+{
+  "servicos": [
+    {
+      "id": "svc_001",
+      "nome": "Corte de Cabelo",
+      "duracao_min": 30,
+      "preco": 45.00,
+      "descricao": "Corte tradicional ou moderno, com acabamento na navalha."
+    },
+    {
+      "id": "svc_002",
+      "nome": "Barba",
+      "duracao_min": 25,
+      "preco": 35.00,
+      "descricao": "Modelagem completa com toalha quente e navalha."
+    },
+    {
+      "id": "svc_003",
+      "nome": "Corte + Barba",
+      "duracao_min": 50,
+      "preco": 70.00,
+      "descricao": "Combo completo de corte e barba."
+    },
+    {
+      "id": "svc_004",
+      "nome": "Sobrancelha",
+      "duracao_min": 15,
+      "preco": 20.00,
+      "descricao": "Design e aparação de sobrancelha na navalha."
+    },
+    {
+      "id": "svc_005",
+      "nome": "Coloração",
+      "duracao_min": 60,
+      "preco": 90.00,
+      "descricao": "Coloração de cabelo ou barba, produtos profissionais."
+    }
+  ],
+  "horario_funcionamento": {
+    "segunda": null,
+    "terca": "09:00-19:00",
+    "quarta": "09:00-19:00",
+    "quinta": "09:00-19:00",
+    "sexta": "09:00-20:00",
+    "sabado": "08:00-18:00",
+    "domingo": null
+  },
+  "barbeiros": [
+    {"id": "barb_001", "nome": "Diogo"},
+    {"id": "barb_002", "nome": "Marcos"}
+  ]
+}
