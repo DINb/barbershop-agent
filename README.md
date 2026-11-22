@@ -1,94 +1,113 @@
-# Barbearia Corte Certo — Agente de Atendimento (POC)
+# Barbershop Agent — Atendente de IA para barbearias (POC)
 
-POC de um assistente virtual para barbearias, cobrindo **agendamento,
-confirmação, cancelamento e remarcação**, com **conformidade LGPD** embutida
-no fluxo de conversa — não como um adendo jurídico, mas como parte do
-produto.
+Prova de conceito de um assistente de IA que atende clientes de uma barbearia em linguagem natural: tira dúvidas sobre serviços e preços, consulta horários, agenda, cancela e remarca, tudo com **consentimento LGPD** antes de guardar qualquer dado pessoal e **transferência para um humano** quando necessário.
 
-Arquitetura no mesmo padrão do [`oic-fusion-incident-agent`](https://github.com/DINb):
-agente orquestrado via **Groq API (Llama 3.3)** com tool-calling, RAG leve
-(TF-IDF) para base de conhecimento, e endpoints REST mockados desenhados no
-mesmo estilo de um Integration Flow no OIC (entrada validada → regra de
-negócio → resposta padronizada).
+> **Status:** prova de conceito. Ela valida a ideia ponta a ponta, mas usa dados simulados (arquivos JSON) e não está pronta para produção. Veja [Limitações](#limitações) e [Próximos passos](#próximos-passos-rumo-a-um-mvp).
 
-## Por que isso importa para o cliente (dono da barbearia)
+## O que o agente faz
 
-- **Menos no-show**: confirmações e lembretes automáticos.
-- **Zero conflito de agenda**: regra de negócio impede overbooking.
-- **Proteção jurídica**: consentimento registrado e auditável, retenção de
-  dados com prazo definido, atendimento aos direitos do titular (acesso e
-  exclusão) — reduz risco de multa por descumprimento da LGPD (art. 52).
-- **Escalável**: a mesma arquitetura de agente + tools pode, depois, plugar
-  em WhatsApp Business API real, banco de dados persistente, e até em
-  integrações com sistemas de gestão da barbearia via OIC.
+- Responde sobre serviços, preços, duração e equipe usando uma base de conhecimento (RAG simples).
+- Consulta horários disponíveis e entende datas em linguagem natural ("sábado que vem", "dia 14"), respondendo no padrão brasileiro `DD/MM/AAAA`.
+- Cria, cancela e remarca agendamentos.
+- **LGPD:** apresenta o texto de consentimento e só cria o agendamento depois que o cliente aceita. A regra vale no prompt **e** no código (defesa em profundidade). O cliente também pode consultar ou apagar os próprios dados.
+- **Transferência para humano:** reclamações, pedidos de exceção, perguntas fora do escopo ou pedido explícito por um atendente notificam o dono do negócio.
+
+## Como funciona
+
+```
+Cliente (chat/WhatsApp)
+        │
+        ▼
+ Interface de entrada ──► BarbershopAgent (agent_orchestrator.py)
+ (chat web ou webhook)         │
+                               ├─ Groq API (LLM com tool-calling)
+                               └─ Tools: serviços (RAG) · disponibilidade · agendamento
+                                         · consentimento LGPD · dados do cliente · humano
+```
+
+O modelo decide qual *tool* chamar, o resultado volta para ele e ele formula a resposta. A "porta de entrada" é intercambiável: o mesmo agente atende o chat web de testes e o webhook do WhatsApp.
+
+## Stack
+
+- Python, FastAPI e Uvicorn
+- Groq API (modelo `openai/gpt-oss-120b`, configurável em `agent_orchestrator.py`) com tool-calling
+- Whapi Cloud para o WhatsApp (opcional) e ngrok para expor o webhook em desenvolvimento
+
+## Como rodar (modo mais simples: chat web local)
+
+Não precisa de WhatsApp, Whapi nem ngrok. Só de uma chave da Groq (gratuita).
+
+```powershell
+git clone https://github.com/DINb/barbershop-agent.git
+cd barbershop-agent
+
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+copy .env.example .env
+# edite o .env e preencha GROQ_API_KEY
+
+uvicorn test_chat_server:app --port 8001
+```
+
+Abra `http://127.0.0.1:8001` e converse com o agente. Em `http://127.0.0.1:8001/?demo=1` o chat digita sozinho um roteiro de exemplo, útil para gravar uma demonstração.
+
+## Como rodar com WhatsApp (Whapi Cloud)
+
+1. Crie um canal na [Whapi Cloud](https://whapi.cloud) e conecte um número por QR code.
+2. Preencha `WHAPI_TOKEN` no `.env` (e, opcionalmente, `OWNER_PHONE`, o número que recebe as transferências para humano).
+3. Suba o webhook e o túnel:
+   ```powershell
+   uvicorn whapi_webhook:app --port 8000
+   ngrok http 8000
+   ```
+4. Cadastre `https://SEU-TUNEL.ngrok-free.dev/webhook` como webhook de mensagens no painel da Whapi.
+
+O webhook responde `200` imediatamente e processa a mensagem em segundo plano, com *retry* nas chamadas à Whapi, para que lentidão de terceiros não derrube a requisição. Mensagens de grupos, canais e listas de transmissão são ignoradas.
+
+## Variáveis de ambiente
+
+| Variável | Uso |
+|---|---|
+| `GROQ_API_KEY` | Chave da Groq (obrigatória) |
+| `WHAPI_TOKEN` | Token do canal na Whapi Cloud (só no modo WhatsApp) |
+| `OWNER_PHONE` | Número do dono, para avisos de transferência para humano (opcional) |
+
+Nunca faça commit do arquivo `.env`.
 
 ## Estrutura do projeto
 
-```
-barbershop-agent/
-├── agent_orchestrator.py   # Agente (Groq + tool-calling) e regras de LGPD
-├── mock_api.py              # Endpoints REST simulados (agendamento, notificação)
-├── lgpd_compliance.py        # Consentimento, direitos do titular, retenção
-├── rag_knowledge.py          # RAG (TF-IDF) sobre serviços/preços/horários
-├── interactive_cli.py        # Demo em terminal
-├── data/
-│   ├── services.json         # Catálogo de serviços e horário de funcionamento
-│   ├── appointments.json     # Agendamentos (estado em memória/arquivo)
-│   └── consent_log.json      # Registro de consentimentos LGPD
-└── requirements.txt
-```
+| Arquivo | Função |
+|---|---|
+| `agent_orchestrator.py` | Agente: prompt, tools e loop de tool-calling |
+| `test_chat_server.py` | Chat web local para testar e demonstrar o agente |
+| `whapi_webhook.py` | Webhook do WhatsApp via Whapi Cloud |
+| `whatsapp_webhook.py`, `zapi_webhook.py` | Versões anteriores da integração (Meta Cloud API e Z-API) |
+| `rag_knowledge.py` | Base de conhecimento de serviços, preços e horários |
+| `mock_api.py` | Agenda simulada (arquivos JSON em `data/`) |
+| `lgpd_compliance.py` | Consentimento e direitos do titular (acesso e exclusão) |
+| `human_handoff.py` | Transferência da conversa para um humano |
+| `interactive_cli.py` | Chat pelo terminal |
+| `dashboard_server.py`, `dashboard_metrics.py` | Painel de métricas e gráficos para o dono do negócio |
+| `data/` | Serviços e dados simulados |
 
-## Como rodar a demo
+## Limitações
 
-```bash
-pip install -r requirements.txt
-export GROQ_API_KEY="sua_chave_aqui"
-python interactive_cli.py
-```
+- A agenda é simulada em arquivos JSON, sem banco de dados e sem controle de concorrência.
+- O histórico das conversas fica em memória e se perde ao reiniciar o servidor.
+- Não há autenticação, limite de mensagens por cliente nem multi-barbearia.
+- Respostas de um LLM variam; não há suíte de testes automatizados do comportamento do agente.
+- O plano gratuito da Whapi tem cota curta de mensagens e dias de uso.
 
-### Roteiro sugerido de demonstração (para o cliente)
+## Próximos passos rumo a um MVP
 
-1. **Pergunta de serviço** — "Quanto custa corte e barba?"
-   → mostra o RAG respondendo sem precisar de agendamento.
-2. **Início de agendamento** — "Quero marcar um corte pra sábado às 10h"
-   → o agente **pede consentimento LGPD antes de gravar qualquer dado
-   pessoal**. Esse é o momento de destacar o diferencial pro cliente.
-3. **Confirmação** — cliente aceita, agente cria o agendamento e "envia"
-   confirmação (`enviar_notificacao`).
-4. **Remarcação** — "Preciso mudar para domingo" → mostra que domingo está
-   fechado (regra de negócio no `services.json`), e sugere alternativa.
-5. **Direito de acesso** — "Quero ver meus dados" → `consultar_meus_dados`.
-6. **Direito ao esquecimento** — "Apaga meus dados" → `apagar_meus_dados`,
-   anonimiza sem quebrar o histórico estatístico.
-7. **Bastidor de auditoria** — digite `/auditoria` no CLI para mostrar o log
-   de conformidade, ótimo argumento de venda ("tudo fica registrado").
+- Banco de dados no lugar do `mock_api.py` e integração com uma agenda real.
+- Linha de WhatsApp dedicada (Whapi paga ou Meta Cloud API oficial).
+- Painel para o dono da barbearia, com agenda, conversas e transferências.
+- Configuração por barbearia (serviços, horários, tom de voz), limite de mensagens e logs de auditoria da LGPD.
+- Testes automatizados dos fluxos principais (consentimento, agendamento, transferência).
 
-## Integração real com WhatsApp (número de teste gratuito da Meta)
+## Aviso
 
-Veja o passo a passo completo na resposta do Claude ou siga resumidamente:
-
-1. Crie um app tipo "Business" em developers.facebook.com/apps, adicione o produto WhatsApp.
-2. Gere um token de acesso e anote o "Phone Number ID" do número de teste.
-3. Copie `.env.example` para `.env` e preencha `GROQ_API_KEY`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `VERIFY_TOKEN`.
-4. Rode `uvicorn whatsapp_webhook:app --reload --port 8000`.
-5. Exponha a porta local com `ngrok http 8000` (ou similar) para obter uma URL pública https.
-6. No painel da Meta, em WhatsApp > Configuration, cole a URL pública + `/webhook` como Callback URL, e o mesmo valor de `VERIFY_TOKEN` no campo Verify Token.
-7. Adicione seu próprio número como destinatário de teste (a Meta envia um código de confirmação por WhatsApp).
-8. Mande uma mensagem para o número de teste da barbearia e veja o agente responder.
-
-## Próximos passos (para a proposta comercial pós-demo)
-
-- Integração real com WhatsApp Business API / Twilio para notificações.
-- Persistência em banco de dados (Postgres/Oracle) em vez de JSON.
-- Painel administrativo para o dono da barbearia (agenda, relatórios).
-- Hospedagem + manutenção mensal (SLA de suporte, atualizações).
-- Assinatura de contrato de operador de dados (LGPD) formalizando o papel
-  do prestador de serviço frente ao controlador (a barbearia).
-
-## Nota sobre esta POC
-
-Os dados de agendamento, consentimento e disponibilidade são simulados em
-arquivos JSON para fins de demonstração. Em produção, cada ponto marcado
-como "mock" neste código seria substituído por uma integração real (banco
-de dados, gateway de notificação, etc.), mantendo o mesmo contrato de tools
-usado pelo agente.
+Projeto de portfólio, em fase de prova de conceito. Todos os dados de exemplo são fictícios.
