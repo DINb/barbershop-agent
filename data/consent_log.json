@@ -1,3 +1,22 @@
 {
-  "consents": []
+  "consents": [
+    {
+      "consent_id": "6d8390d2-f04b-4cc6-9e32-fe19ad30fb59",
+      "cliente_nome": "João Galdino",
+      "cliente_telefone": "8198844346",
+      "aceito": true,
+      "finalidade": "Agendamento, confirmação, lembrete e remarcação de serviços de barbearia",
+      "base_legal": "Consentimento do titular (art. 7º, I, LGPD)",
+      "timestamp": "2026-09-11T12:09:55.772192"
+    },
+    {
+      "consent_id": "bb55a3be-4810-470c-93aa-9b2a76342fe3",
+      "cliente_nome": "João da Silva",
+      "cliente_telefone": "81989855534",
+      "aceito": true,
+      "finalidade": "Agendamento, confirmação, lembrete e remarcação de serviços de barbearia",
+      "base_legal": "Consentimento do titular (art. 7º, I, LGPD)",
+      "timestamp": "2026-11-22T18:12:36.534750"
+    }
+  ]
 }

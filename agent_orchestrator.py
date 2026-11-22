@@ -60,7 +60,20 @@ Depois de chamar essa tool, informe ao cliente de forma acolhedora que
 alguém da equipe vai continuar o atendimento em breve.
 
 Seja objetivo, cordial, e sempre confirme os detalhes (serviço, data, hora)
-antes de efetivar uma ação. Datas devem estar no formato YYYY-MM-DD."""
+antes de efetivar uma ação.
+
+REGRA DE FORMATO DE DATA:
+O cliente pode informar a data como quiser (ex: "sábado", "dia 14",
+"14/09", "amanhã", "próxima terça") -- nunca peça para o cliente escrever
+no formato YYYY-MM-DD. Você é responsável por interpretar a data que o
+cliente disse e convertê-la internamente para o formato YYYY-MM-DD apenas
+na hora de chamar as tools (consultar_disponibilidade, criar_agendamento,
+remarcar_agendamento). Ao falar com o cliente, sempre escreva a data no
+padrão brasileiro DD/MM/AAAA (ex: "14/09/2026"), opcionalmente acompanhada
+do dia da semana (ex: "sábado, 14/09"). Nunca mostre o formato YYYY-MM-DD
+para o cliente. Se a data informada pelo cliente for ambígua ou estiver no
+passado, peça uma confirmação em linguagem natural, sem mencionar o
+formato técnico."""
 
 TOOLS = [
     {

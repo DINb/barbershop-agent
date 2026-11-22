@@ -1,43 +1,38 @@
 """
-whatsapp_webhook.py
----------------------
-Servidor que conecta o agent_orchestrator.py (já existente) à Meta WhatsApp
-Cloud API. Substitui o interactive_cli.py como "porta de entrada" do agente,
-sem mudar nada da lógica de negócio, RAG ou LGPD.
+whapi_webhook.py
+-------------------
+Versão do servidor webhook usando a Whapi Cloud (sandbox gratuito) em vez
+da Meta Cloud API ou da Z-API. Mesma lógica das outras duas versões --
+o agente conversacional (agent_orchestrator.py, com Groq + tool-calling)
+continua sendo o "cérebro"; este arquivo só troca a "porta de entrada" e o
+formato de envio/recebimento de mensagem para o padrão da Whapi Cloud.
 
-Fluxo:
-1. Meta manda um POST /webhook toda vez que o cliente envia mensagem no WhatsApp.
-2. Extraímos o texto e o número do remetente.
-3. Chamamos agent.chat(texto) -- o mesmo agente do CLI.
-4. Enviamos a resposta de volta via API da Meta (POST /messages).
+Whapi Cloud conecta via QR code no seu WhatsApp comum (como o WhatsApp
+Web) e tem um sandbox gratuito para sempre, sem taxa por mensagem -- ótimo
+para a fase de testes/demo.
 
-Variáveis de ambiente necessárias (veja .env.example):
-- GROQ_API_KEY        -> mesma chave já usada no agent_orchestrator.py
-- WHATSAPP_TOKEN      -> token de acesso gerado no Meta App Dashboard
-- WHATSAPP_PHONE_ID   -> ID do número de teste (Phone Number ID)
-- VERIFY_TOKEN        -> palavra-chave que você escolhe, usada na verificação do webhook
+Variáveis de ambiente necessárias (veja .env):
+- GROQ_API_KEY   -> mesma chave já usada no agent_orchestrator.py
+- WHAPI_TOKEN    -> token do canal, copiado do painel da Whapi Cloud
+- OWNER_PHONE    -> (opcional) número do dono, para receber transferências humanas
 """
 
 import os
 import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import PlainTextResponse
 
 from agent_orchestrator import BarbershopAgent
 import human_handoff
 
 load_dotenv()
 
-app = FastAPI(title="Barbearia WhatsApp Webhook")
+app = FastAPI(title="Barbearia Whapi Cloud Webhook")
 
-WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
-WHATSAPP_PHONE_ID = os.environ.get("WHATSAPP_PHONE_ID")
-VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "barbearia_verify_token")
-GRAPH_API_URL = f"https://graph.facebook.com/v21.0/{WHATSAPP_PHONE_ID}/messages"
+WHAPI_TOKEN = os.environ.get("WHAPI_TOKEN")
+WHAPI_SEND_TEXT_URL = "https://gate.whapi.cloud/messages/text"
 
-# Um agente por número de cliente, para manter o histórico de conversa de
-# cada pessoa separado (equivalente a uma sessão por usuário).
+# Um agente por número de cliente, mantendo o histórico de cada conversa separado.
 agents_by_phone: dict[str, BarbershopAgent] = {}
 
 
@@ -47,19 +42,19 @@ def get_agent_for(phone: str) -> BarbershopAgent:
     return agents_by_phone[phone]
 
 
-def send_whatsapp_message(to: str, text: str) -> dict:
+def _normalizar_numero(chat_id: str) -> str:
+    """A Whapi manda o chat_id como '5581999998888@s.whatsapp.net'.
+    Para enviar uma mensagem, o campo 'to' espera só os números."""
+    return chat_id.split("@")[0]
+
+
+def send_whatsapp_message(phone: str, message: str) -> dict:
     headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Authorization": f"Bearer {WHAPI_TOKEN}",
         "Content-Type": "application/json",
     }
-    payload = {
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": to,
-        "type": "text",
-        "text": {"body": text},
-    }
-    resp = requests.post(GRAPH_API_URL, headers=headers, json=payload, timeout=15)
+    payload = {"to": _normalizar_numero(phone), "body": message}
+    resp = requests.post(WHAPI_SEND_TEXT_URL, headers=headers, json=payload, timeout=15)
     resp.raise_for_status()
     return resp.json()
 
@@ -69,52 +64,34 @@ def send_whatsapp_message(to: str, text: str) -> dict:
 human_handoff.register_notifier(send_whatsapp_message)
 
 
-@app.get("/webhook")
-def verify_webhook(request: Request):
-    """A Meta chama esse GET uma vez, ao configurar o webhook, pra confirmar
-    que você é dono do endpoint."""
-    params = request.query_params
-    mode = params.get("hub.mode")
-    token = params.get("hub.verify_token")
-    challenge = params.get("hub.challenge")
-
-    if mode == "subscribe" and token == VERIFY_TOKEN:
-        return PlainTextResponse(content=challenge, status_code=200)
-    return PlainTextResponse(content="Token de verificação inválido", status_code=403)
-
-
 @app.post("/webhook")
 async def receive_message(request: Request):
-    """Recebe as mensagens reais enviadas pelos clientes no WhatsApp."""
+    """Recebe o evento de mensagem que a Whapi Cloud envia."""
     body = await request.json()
 
-    try:
-        entry = body["entry"][0]
-        change = entry["changes"][0]["value"]
+    for message in body.get("messages", []):
+        # Ignora mensagens enviadas pelo próprio número conectado (from_me=True)
+        # e qualquer coisa que não seja mensagem de texto simples.
+        if message.get("from_me"):
+            continue
 
-        if "messages" not in change:
-            # Pode ser um evento de status (entregue/lido), não uma mensagem nova.
-            return Response(status_code=200)
+        chat_id = message.get("chat_id", "")
+        texto = message.get("text", {}).get("body", "").strip()
 
-        message = change["messages"][0]
-        sender_phone = message["from"]
-        text = message.get("text", {}).get("body", "")
+        if not chat_id:
+            continue
 
-        if not text:
-            send_whatsapp_message(sender_phone, "Por enquanto só consigo entender mensagens de texto :)")
-            return Response(status_code=200)
+        if not texto:
+            send_whatsapp_message(chat_id, "Por enquanto só consigo entender mensagens de texto :)")
+            continue
 
-        agent = get_agent_for(sender_phone)
-        resposta = agent.chat(text)
-        send_whatsapp_message(sender_phone, resposta)
-
-    except (KeyError, IndexError):
-        # Payload que não é uma mensagem de usuário (ex: confirmação de leitura).
-        pass
+        agent = get_agent_for(chat_id)
+        resposta = agent.chat(texto)
+        send_whatsapp_message(chat_id, resposta)
 
     return Response(status_code=200)
 
 
 @app.get("/")
 def health_check():
-    return {"status": "online", "service": "Barbearia WhatsApp Webhook"}
+    return {"status": "online", "service": "Barbearia Whapi Cloud Webhook"}
